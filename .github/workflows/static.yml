@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Alphabet Translator</title>
+<style>
+:root{--ink:#182033;--muted:#687386;--line:#dce2ea;--bg:#f3f5f9;--accent:#4358c9}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+main{width:min(960px,calc(100% - 30px));margin:34px auto}
+header{text-align:center;margin:0 0 24px}h1{font-size:clamp(2rem,5vw,2.8rem);margin:0;letter-spacing:-.04em}header p{color:var(--muted);margin:7px 0}
+.panel{background:#fff;border:1px solid var(--line);border-radius:18px;padding:21px;box-shadow:0 8px 26px #1c29400a}
+label{display:block;font-weight:700;margin:0 0 9px}
+textarea{width:100%;min-height:130px;resize:vertical;border:1px solid var(--line);border-radius:12px;padding:14px;font:16px/1.5 system-ui,sans-serif;outline:none;color:var(--ink)}
+textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px #4358c91a}
+.actions{display:flex;flex-wrap:wrap;gap:9px;margin:13px 0 19px}
+button{border:0;border-radius:10px;padding:11px 15px;background:var(--accent);color:white;font-weight:700;cursor:pointer}button.secondary{background:#edf0f7;color:var(--ink)}
+.output{min-height:135px;display:flex;flex-wrap:wrap;align-items:center;align-content:flex-start;gap:4px;border:1px solid var(--line);border-radius:12px;background:#fbfcff;padding:13px}
+.glyph{width:39px;height:43px;color:#111;overflow:visible}.space{width:14px}.punct{font-size:25px}
+.note{font-size:13px;color:var(--muted);margin:9px 0 0}h2{font-size:1.15rem;margin:26px 0 11px}
+.key{display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:8px}.tile{border:1px solid var(--line);border-radius:11px;background:#fff;text-align:center;padding:8px 4px}.tile .glyph{width:43px;height:47px}.letter{font-size:12px;font-weight:750;color:var(--muted);margin-top:2px}
+footer{text-align:center;color:var(--muted);font-size:12px;margin:20px}
+@media(max-width:550px){main{margin:22px auto}.panel{padding:15px}.key{grid-template-columns:repeat(4,1fr)}}
+</style>
+</head>
+<body>
+<main>
+<header><h1>Alphabet Translator</h1><p>Type in English and convert each letter into its assigned symbol.</p></header>
+<section class="panel">
+<label for="english">English text</label>
+<textarea id="english" placeholder="Type something...">Hello, world!</textarea>
+<div class="actions"><button id="translate">Translate ↓</button><button class="secondary" id="clear">Clear</button></div>
+<label>Translated symbols</label>
+<div class="output" id="output" aria-live="polite"></div>
+<div class="actions">
+<button class="secondary" id="download">Download symbols as SVG</button>
+<button class="secondary" id="copy">Copy SVG</button>
+</div>
+<p class="note">Spaces and punctuation stay as typed. The symbols are custom-drawn here, so the result does not depend on a special font.</p>
+</section>
+<h2>Alphabet key</h2>
+<section class="panel"><div class="key" id="key"></div><p class="note">Each symbol is drawn with simple lines or curves. A few similar-looking marks have been adjusted slightly so every letter has a distinct symbol.</p></section>
+<footer>Alphabet · Translator</footer>
+</main>
+<script>
+/* The 26 letter-to-glyph assignments from the latest chart.
+   B/Z and C/W are separated with small design changes so all mappings are unique. */
+const shapes={
+A:["M4 31 Q20 2 36 31"],
+B:["M8 5 L32 5 L32 31"],
+C:["M5 10 Q20 39 35 10"],
+D:["M8 5 L32 5 L32 35 L8 35 Z"],
+E:["M20 20 m-3.8 0 a3.8 3.8 0 1 0 7.6 0 a3.8 3.8 0 1 0 -7.6 0"],
+F:["M20 3 L20 37","M4 20 L36 20"],
+G:["M5 20 L35 20"],
+H:["M20 4 L20 36"],
+I:["M8 33 L32 7"],
+J:["M8 7 L32 33"],
+K:["M5 34 L20 6 L35 34 Z"],
+L:["M8 7 L32 20 L8 33"],
+M:["M32 7 L8 20 L32 33"],
+N:["M5 20 Q20 3 35 20 Q20 37 5 20"],
+O:["M20 5 L20 29","M5 29 L35 29"],
+P:["M8 5 L8 35","M8 35 L35 35"],
+Q:["M20 4 L36 20 L20 36 L4 20 Z"],
+R:["M5 7 L20 33 L35 7"],
+S:["M5 33 L20 7 L35 33"],
+T:["M20 4 A16 16 0 1 0 20 36 A16 16 0 1 0 20 4"],
+U:["M5 13 L35 13","M5 27 L35 27"],
+V:["M20 3 Q25 14 37 20 Q25 26 20 37 Q15 26 3 20 Q15 14 20 3 Z"],
+W:["M5 8 Q20 39 35 8","M10 13 Q20 30 30 13"],
+X:["M14 14 L26 14 L26 26 L14 26 Z","M14 14 L26 26 M26 14 L14 26"],
+Y:["M12 5 L12 35","M28 5 L28 35"],
+Z:["M8 5 L32 5 L8 35"]
+};
+const NS="http://www.w3.org/2000/svg";
+function glyph(letter){
+ const svg=document.createElementNS(NS,"svg");svg.setAttribute("viewBox","0 0 40 40");svg.setAttribute("class","glyph");svg.setAttribute("aria-label","Symbol for "+letter);svg.setAttribute("role","img");
+ for(const d of shapes[letter]){
+  const p=document.createElementNS(NS,"path");p.setAttribute("d",d);p.setAttribute("fill","none");p.setAttribute("stroke","currentColor");p.setAttribute("stroke-width","3.2");p.setAttribute("stroke-linecap","round");p.setAttribute("stroke-linejoin","round");svg.appendChild(p);
+ }
+ return svg;
+}
+function makeSvgForText(text){
+ let x=10,y=12;const gap=44,line=62;let parts=[];
+ for(const ch of text){
+  const up=ch.toUpperCase();
+  if(shapes[up]){
+   parts.push(`<g transform="translate(${x} ${y})">${shapes[up].map(d=>`<path d="${d}" fill="none" stroke="#111" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>`).join("")}</g>`);
+   x+=gap;
+  }else if(ch===" "){x+=22;}
+  else{
+   const safe=ch.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+   parts.push(`<text x="${x+10}" y="${y+29}" font-size="24" fill="#111">${safe}</text>`);x+=gap;
+  }
+  if(x>900){x=10;y+=line;}
+ }
+ const width=Math.max(200,Math.min(1000,x+10)),height=y+52;
+ return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="white"/>${parts.join("")}</svg>`;
+}
+const input=document.getElementById("english"),out=document.getElementById("output");
+function translate(){
+ out.replaceChildren();
+ for(const ch of input.value){
+  const letter=ch.toUpperCase();
+  if(shapes[letter])out.appendChild(glyph(letter));
+  else if(ch===" "){const s=document.createElement("span");s.className="space";out.appendChild(s);}
+  else{const p=document.createElement("span");p.className="punct";p.textContent=ch;out.appendChild(p);}
+ }
+}
+document.getElementById("translate").onclick=translate;
+document.getElementById("clear").onclick=()=>{input.value="";out.replaceChildren();input.focus();};
+document.getElementById("download").onclick=()=>{
+ const blob=new Blob([makeSvgForText(input.value)],{type:"image/svg+xml"});
+ const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download="translated-symbols.svg";a.click();URL.revokeObjectURL(url);
+};
+document.getElementById("copy").onclick=async()=>{
+ try{
+  const blob=new Blob([makeSvgForText(input.value)],{type:"image/svg+xml"});
+  await navigator.clipboard.write([new ClipboardItem({"image/svg+xml":blob})]);
+  const b=document.getElementById("copy");b.textContent="Copied!";setTimeout(()=>b.textContent="Copy SVG",1300);
+ }catch{alert("Copying SVG is not supported in this browser. Use “Download symbols as SVG” instead.");}
+};
+const key=document.getElementById("key");
+Object.keys(shapes).forEach(letter=>{const tile=document.createElement("div");tile.className="tile";tile.appendChild(glyph(letter));const l=document.createElement("div");l.className="letter";l.textContent=letter;tile.appendChild(l);key.appendChild(tile);});
+translate();
+</script>
+</body>
+</html>
